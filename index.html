@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<meta charset="utf-8" />
+	<meta name="format-detection" content="telephone=no" />
+	<meta name="msapplication-tap-highlight" content="no" />
+	<meta name="viewport" content="user-scalable=no, initial-scale=1, maximum-scale=1, minimum-scale=1, width=device-width" />
+	<link rel="stylesheet" href="http://code.jquery.com/mobile/1.4.5/jquery.mobile-1.4.5.min.css">
+	<script src="https://code.jquery.com/jquery-2.1.4.js" integrity="sha256-siFczlgw4jULnUICcdm9gjQPZkw/YPDqhQ9+nAOScE4="	crossorigin="anonymous"></script>
+	<script src="http://code.jquery.com/mobile/1.4.5/jquery.mobile-1.4.5.min.js"></script>
+   <link rel="stylesheet" type="text/css" href="css/index.css">
+	<title>Paikka-appi</title>
+</head>
+<body>
+					<!---Etusivu--->
+	<div data-role="page" id="etusivu">
+		<div data-data-role="header">
+			<h1>Paikan hakeminen</h1>
+		</div>         
+		<div data-role="main" class="ui-content ui-body-a">
+			<p>Tervetuloa käyttämään Paikka-appia. Lisää paikka, tarkastele paikkoja listalla, tai katso paikat kartalla.</p>			
+					<a href="#tallenna" class="ui-btn">Lisää paikka</a>
+					<a href="#listaus" class="ui-btn">Paikat kartalla</a>
+					
+		</div>
+		<ul data-role="listview" data-split-icon="delete" data-split-theme="a" id="lista"></ul>
+		
+		
+
+		<div data-role="footer">
+			<h1>Paikka-appi</h1>
+		</div>
+	</div>
+	
+					<!---Tallennussivu--->
+		<div data-role="page" id="tallenna">
+		<div data-role="header">
+			<h1>Paikan tallennus</h1>
+		</div>
+         
+		<div role="main" class="ui-content ui-body-a">
+			<div id="paiva"></div> 
+			<p>Tänne lomake, jolla voidaan lisätä paikka</p>
+			<div id="lisaaTiedot">
+				<form id="lisaaLomake">
+					<label for="nimi">Nimi:</label>
+					<input type="text" name="nimi" id="nimi">
+					<label for="teksi">Kuvaus:</label>
+					<input type="text" name="teksti" id="teksti">
+					<label for="koord">Koordinaatit:</label>
+					<input type="text" name="lat" id="lat">
+					<input type="text" name="lng" id="lng">
+					<!-- <input type="hidden" name="kuvaBase64" id="kuvaBase64"> -->
+					<input type="button" class="ui-btn" id="lisaaUusi" value="Lisää uusi">
+				</form>
+			</div>
+			<a href="#etusivu" class="ui-btn">Etusivulle</a>
+			<a href="#listaus" class="ui-btn">Paikat kartalla</a>
+		</div>
+
+		<div data-role="footer">
+			<h1>Paikka-appi</h1>
+		</div>
+	</div>
+	
+					<!---Karttasivu--->
+	<div data-role="page" id="listaus">
+		<div data-role="header">
+			<h1>Paikat kartalla listaus</h1>
+		</div>
+         
+		<div role="main" class="ui-content ui-body-a"> 
+			<div id="mapKartta" style="height:500px"></div>
+			<a href="#etusivu" class="ui-btn">Etusivulle</a>
+		</div>
+
+		<div data-role="footer">
+			<h1>Paikka-appi</h1>
+		</div>
+	</div>
+		
+	<script type="text/javascript" src="cordova.js"></script> <!-- mahdollistaa laitteen ominaisuuksien käytön -->	
+	<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAGFvzrk2W0Ycnr5c5c7IFkOUkxw4sJ6Xg"></script> <!--Oma api_key-->
+	<script>	
+
+		//Laitetaan kaksi jarrua päälle. 
+		var laiteKesken = $.Deferred();
+		var sivuKesken = $.Deferred();	
+		
+		//Lisätään tapahtumankuuntelija tapahtumalle "onDeviceReady"
+		document.addEventListener("deviceReady", onDeviceReady, false);
+		function onDeviceReady() {			
+			laiteKesken.resolve();	//jarru_1=False				
+		}	
+			//Jarrun 2 vapautus
+		$(document).on("pagecontainershow", function( event, ui ) {	
+			var toPage = ui.toPage[0].id; 
+			if(toPage=="etusivu"){				
+				sivuKesken.resolve();
+				haeLista();
+			}			
+		});	
+		
+		$(document).on("pagecontainerbeforeshow", function( event, ui ) {	
+			var toPage = ui.toPage[0].id;
+				//ennen kuin ladataan sivua listaus, haetaan geo position, ja tehdään kartta (ei toimi hyvin!!!)
+			if(toPage=="listaus"){				
+				navigator.geolocation.getCurrentPosition(onLocationSuccess, onLocationError, { timeout: 20000 });
+				function onLocationSuccess(position) {						
+					teeMap(position.coords.latitude, position.coords.longitude);					
+				}
+				function onLocationError() {				
+					console.log("Paikannus ei onnistu");
+				}	
+			//kun mennään tallennussivulle, haetaan nykyinen paikka koordinaatteihin
+			}else if(toPage=="tallenna"){				
+				navigator.geolocation.getCurrentPosition(onLocationSuccess, onLocationError, { timeout: 20000 });
+			function onLocationSuccess(position) {						
+				var lati=position.coords.latitude;
+				var loni=position.coords.longitude;
+				$("#lat").val(lati);
+				$("#lng").val(loni);					
+			}
+			function onLocationError() {				
+				console.log("Paikannus ei onnistu");
+			}
+			}
+		});
+				//haetaan tietokannasta paikan nimi ja laitetaan listaan etusivulle
+		function haeLista(){
+			$("#lista").html("");
+			$.getJSON("http://proto387.haaga-helia.fi/~bfy009/backend/haepaikat.php", function(result){
+				tulos="";
+				$.each(result, function(i, field) {
+					tulos = tulos + "<li><a><h3>" +field.nimi+	"</h3><p>" +field.teksti +"</p></a><a href='#' onclick='Poista("+field.paikka_id+")'></a></li>"								
+				});
+				$("#lista").html(tulos).listview("refresh");
+			});
+		}
+				//tehdään kartta haetuilla paikoilla, nykyinen sijainti
+		
+		function teeMap(lat, lon) {	
+			var paikka;
+			paikka = new google.maps.LatLng(lat, lon);	
+			
+			var myOptions = {
+				zoom:10,
+				center: {lat: lat, lng: lon}
+			};
+				
+			var kartta = new google.maps.Map(document.getElementById("mapKartta"), myOptions);
+			var image = 'https://developers.google.com/maps/documentation/javascript/examples/full/images/beachflag.png';
+				//tietojen kannasta haku ja markkerit
+			$.ajax({
+					type: 'POST',
+					data: $("#loginLomake").serialize(),
+					url: 'http://proto387.haaga-helia.fi/~bfy009/backend/haepaikat.php',
+					success: function(data){
+						var locations=[];
+						var paikat = JSON.parse(data);						
+						for(var i=0;i<paikat.length;i++){
+							var paikka={
+							"lat" : parseFloat(paikat[i].lat),
+							"lng" : parseFloat(paikat[i].lng)
+							};							
+							locations.push(paikka);
+						}	
+						var markers = locations.map(function(location, i) {
+						return new google.maps.Marker({
+							position: location,
+							map: kartta,
+							icon: image,	
+							label: paikat[i].nimi
+						});				
+					});	
+					},
+					error: function(){	
+						console.log(2);											
+					}
+				});			
+			
+						
+		}
+				//Lähetetään uuden paikan tiedot kantaan, kun painetaan lisaauusi
+		$("#lisaaUusi").on("tap", function(){
+			if($("#nimi").val().length>0){				
+				$.ajax({
+					type: 'POST',
+					data: $("#lisaaLomake").serialize(),
+					url: 'http://proto387.haaga-helia.fi/~bfy009/backend/lisaapaikka.php',
+					success: function(data){						
+						window.location='#etusivu';						
+					},
+					error: function(){						
+						alert("jokin meni pieleen");						
+					}
+				});				
+			}			
+		});
+		
+		function Poista(id){
+			var id= id;
+			$.ajax({
+					type: 'POST',
+
+					url: 'http://proto387.haaga-helia.fi/~bfy009/backend/poistapaikka.php?paikka_id='+id,
+					success: function(){
+						haeLista()
+						window.location='#etusivu';						
+					},
+					error: function(){						
+						alert("jokin meni pieleen");						
+					}
+				});
+		}
+		
+	</script>
+	
+</body>
+
+</html>
